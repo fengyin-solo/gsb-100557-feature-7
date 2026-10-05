@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.defect import DefectService
 from app.store import store
 
 MODULE = "maintenance"
@@ -10,6 +11,8 @@ REQUIRED_FIELDS = ["计划编号", "检修设备", "检修类别"]
 STATUS_ORDER = ["待审批", "已批复", "执行中", "已完工"]
 ACTION_RULES = {"提交审批": "已批复", "开始执行": "执行中", "确认完工": "已完工"}
 NEGATIVE_ACTIONS = []
+
+defect_service = DefectService()
 
 
 class MaintenanceService:
@@ -32,6 +35,24 @@ class MaintenanceService:
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
         return store.find(MODULE, entry_id)
+
+    def workbench(self) -> dict[str, Any]:
+        """检修工作台：缺陷待办与缺陷列表共用同一份统计口径，两处读数一致。"""
+        defect_summary = defect_service.summary()
+        defect_todo = [
+            row for row in store.rows("defect")
+            if row.get("status") != "已关闭"
+        ]
+        plan_summary = {status: 0 for status in STATUS_ORDER}
+        for row in store.rows(MODULE):
+            status = str(row.get("status") or "")
+            if status in plan_summary:
+                plan_summary[status] += 1
+        return {
+            "defect_summary": defect_summary,
+            "defect_todo": defect_todo,
+            "plan_summary": {**plan_summary, "合计": len(store.rows(MODULE))},
+        }
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]

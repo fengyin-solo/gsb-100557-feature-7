@@ -28,6 +28,15 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class BatchActionPayload(BaseModel):
+    """框选多条记录一起执行动作时提交的参数。"""
+
+    action: str = ""
+    ids: list[int] = Field(default_factory=list)
+    operator: str = "值班管理员"
+    team: str = ""
+
+
 
 class PvArrayEntry(BaseModel):
     """光伏阵列明细结构。"""

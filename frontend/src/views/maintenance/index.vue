@@ -11,6 +11,48 @@
       </div>
     </header>
 
+    <section class="workbench">
+      <h3 class="workbench-title">检修工作台</h3>
+      <div class="stat-row">
+        <article class="stat-card">
+          <span class="stat-label">缺陷待办合计</span>
+          <strong class="stat-value">{{ defectTodo.length }}</strong>
+        </article>
+        <article v-for="item in defectStats" :key="item.label" class="stat-card">
+          <span class="stat-label">{{ item.label }}</span>
+          <strong class="stat-value">{{ item.value }}</strong>
+        </article>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>缺陷编号</th>
+            <th>缺陷设备</th>
+            <th>所属片区</th>
+            <th>严重等级</th>
+            <th>状态</th>
+            <th>分派人</th>
+            <th>验收人</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in defectTodo" :key="String(row.id)">
+            <td>{{ row['缺陷编号'] || '—' }}</td>
+            <td>{{ row['缺陷设备'] || '—' }}</td>
+            <td>{{ row['所属片区'] || '—' }}</td>
+            <td>{{ row['严重等级'] || '—' }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row['分派人'] || '—' }}</td>
+            <td>{{ row['验收人'] || '—' }}</td>
+          </tr>
+          <tr v-if="!defectTodo.length">
+            <td colspan="7" class="empty-state">当前没有待办缺陷</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="workbench-note">缺陷待办与缺陷管理列表共用同一份统计口径，两处读数一致。</p>
+    </section>
+
     <div class="stat-row">
       <article v-for="item in stats" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
@@ -63,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import { request } from '@/api/client'
 
@@ -72,14 +114,27 @@ type Row = Record<string, string | number | null>
 const ENDPOINT = '/api/maintenance'
 const columns = ["计划编号", "检修设备", "检修类别", "计划开始", "计划结束", "责任人", "安全措施", "计划状态"]
 const actions = ["提交审批", "开始执行", "确认完工"]
-const statuses = ["待审批", "已批复", "执行中", "已完工"]
-const stats = [{"label": "待审批计划", "value": 0}, {"label": "执行中计划", "value": 0}, {"label": "本月完工数", "value": 0}]
 
 const rows = ref<Row[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const defectSummary = ref<Record<string, number>>({})
+const defectTodo = ref<Row[]>([])
+const planSummary = ref<Record<string, number>>({})
+
+const defectStats = computed(() => [
+  { label: '待分派', value: defectSummary.value['待分派'] ?? 0 },
+  { label: '处理中', value: defectSummary.value['处理中'] ?? 0 },
+  { label: '已验收', value: defectSummary.value['已验收'] ?? 0 },
+])
+
+const stats = computed(() => [
+  { label: '待审批计划', value: planSummary.value['待审批'] ?? 0 },
+  { label: '执行中计划', value: planSummary.value['执行中'] ?? 0 },
+  { label: '已完工计划', value: planSummary.value['已完工'] ?? 0 },
+])
 
 function resetFilters() {
   filters.value = {}
@@ -99,10 +154,11 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
-    if (!response.ok) {
-      throw new Error('检修计划动作未生效，请稍后重试')
+    const payload = await response.json()
+    if (!payload.ok) {
+      errorMessage.value = payload.message ?? '检修计划动作未生效，请稍后重试'
     }
     await reload()
   } catch (error) {
@@ -114,13 +170,22 @@ async function reload() {
   errorMessage.value = ''
   const query = new URLSearchParams(filters.value as Record<string, string>).toString()
   try {
-    const response = await request(`${ENDPOINT}?${query}`)
-    if (!response.ok) {
+    const [listResponse, workbenchResponse] = await Promise.all([
+      request(`${ENDPOINT}?${query}`),
+      request(`${ENDPOINT}/workbench`),
+    ])
+    if (!listResponse.ok) {
       throw new Error('检修计划列表读取失败')
     }
-    const payload = await response.json()
+    const payload = await listResponse.json()
     rows.value = payload.items ?? []
     total.value = payload.total ?? rows.value.length
+    if (workbenchResponse.ok) {
+      const workbench = await workbenchResponse.json()
+      defectSummary.value = workbench.defect_summary ?? {}
+      defectTodo.value = workbench.defect_todo ?? []
+      planSummary.value = workbench.plan_summary ?? {}
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '检修计划列表读取失败'
   }
