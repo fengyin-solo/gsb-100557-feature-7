@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
 from app.services.maintenance import MaintenanceService
@@ -14,6 +14,12 @@ service = MaintenanceService()
 
 LIST_FIELDS = ["计划编号", "检修设备", "检修类别", "计划开始", "计划结束", "责任人", "安全措施", "计划状态"]
 STATUSES = ["待审批", "已批复", "执行中", "已完工"]
+
+
+@router.get("/workbench")
+def workbench(x_operator_team: str | None = Header(default=None)) -> dict[str, Any]:
+    """检修待办工作台：数据直接来自缺陷服务，与缺陷列表页同源同口径。"""
+    return service.workbench(team=(x_operator_team or "").strip() or None)
 
 
 @router.get("", response_model=PageResult[dict])
@@ -28,6 +34,13 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出检修计划清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "maintenance", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +69,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出检修计划清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "maintenance", "total": total, "items": items}

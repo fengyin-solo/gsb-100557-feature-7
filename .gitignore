@@ -85,3 +85,6 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 缺陷落库数据（运行期生成） =====
+backend/data/

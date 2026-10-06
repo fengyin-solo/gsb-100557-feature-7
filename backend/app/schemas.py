@@ -28,6 +28,15 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class BatchActionPayload(BaseModel):
+    """批量分派/验收/关闭：一次提交多条缺陷，逐条核对、逐条出结果。"""
+
+    action: str
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    conclusion: str = "通过"
+    note: str | None = None
+
+
 
 class PvArrayEntry(BaseModel):
     """光伏阵列明细结构。"""

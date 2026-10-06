@@ -1,8 +1,13 @@
-"""检修计划业务规则：状态流转、字段校验与筛选口径都收在这里。"""
+"""检修计划业务规则：状态流转、字段校验与筛选口径都收在这里。
+
+检修待办工作台不另存一份数据，直接读 DefectService.workbench()：
+缺陷列表与检修待办两处读到的数必须对得上，口径只留一份。
+"""
 from __future__ import annotations
 
 from typing import Any
 
+from app.services.defect import DefectService
 from app.store import store
 
 MODULE = "maintenance"
@@ -11,8 +16,15 @@ STATUS_ORDER = ["待审批", "已批复", "执行中", "已完工"]
 ACTION_RULES = {"提交审批": "已批复", "开始执行": "执行中", "确认完工": "已完工"}
 NEGATIVE_ACTIONS = []
 
+# 检修待办的唯一数据源
+defect_service = DefectService()
+
 
 class MaintenanceService:
+    def workbench(self, *, team: str | None = None) -> dict[str, Any]:
+        """检修计划工作台的缺陷待办：直接转缺陷服务，数字与缺陷页同源。"""
+        return defect_service.workbench(team=team)
+
     def list_entries(
         self,
         *,
